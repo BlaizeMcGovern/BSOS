@@ -2,24 +2,25 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2
 
-# Targets for executables
-TARGET1 = diskinfo
-TARGET2 = ssi
+# Target executables
+TARGET_SSI = ssi
+TARGET_DISKINFO = diskinfo
 
 # Source files
-SRC1 = diskinfo.c
-SRC2 = ssi.c
+SRC_SSI = ssi.c
+SRC_DISKINFO = diskinfo.c
+SRC_DISK = disk.c  # Add disk.c here
 
 # Build rules
-all: $(TARGET1) $(TARGET2)
+all: $(TARGET_SSI) $(TARGET_DISKINFO)
 
-$(TARGET1): $(SRC1)
-	$(CC) $(CFLAGS) -o $(TARGET1) $(SRC1)
+$(TARGET_SSI): $(SRC_SSI) disk.h
+	$(CC) $(CFLAGS) -o $(TARGET_SSI) $(SRC_SSI) $(SRC_DISK)
 
-$(TARGET2): $(SRC2)
-	$(CC) $(CFLAGS) -o $(TARGET2) $(SRC2)
+$(TARGET_DISKINFO): $(SRC_DISKINFO) disk.h
+	$(CC) $(CFLAGS) -o $(TARGET_DISKINFO) $(SRC_DISKINFO) $(SRC_DISK)
 
 # Clean up
 clean:
-	rm -f $(TARGET1) $(TARGET2)
+	rm -f $(TARGET_SSI) $(TARGET_DISKINFO)
 
