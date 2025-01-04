@@ -15,7 +15,7 @@ typedef struct __attribute__((packed)) superblock_t {
 } superblock_t;
 
 int main() {
-    const char *filename = "test.img"; // Replace with your disk image file name
+    const char *filename = "BSOS.img"; // Replace with your disk image file name
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
         perror("Error opening file");
