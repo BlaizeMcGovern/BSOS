@@ -83,9 +83,8 @@ int main() {
                 continue;
             }
             
-            // You can add further command handling logic here
             
-            printf("Command entered: %s\n", command); // For now, just display the command
+            //printf("Command entered: %s\n", command); // For now, just display the command
         } else {
             perror("Error reading command");
             break;
