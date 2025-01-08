@@ -38,8 +38,81 @@ void execute_ls(FILE *disk) {
     display_directory(entries, count);  // Display the entries in the directory
 }
 
+// Find the parent directory block by traversing from the root to the parent
+uint32_t find_parent_block(FILE *disk, uint32_t current_block) {
+    if (strcmp(current_directory_path, "/") == 0) {
+        // Already at root, return root block
+        return 51;
+    }
+
+    char buffer[512];
+    dir_entry_t entries[100];
+    uint32_t parent_block = 51;  // Start traversal from root block
+    char path_copy[512];
+    strcpy(path_copy, current_directory_path);  // Copy path to avoid modifying global
+
+    // Remove the last segment from the path to get the parent path
+    char *last_slash = strrchr(path_copy, '/');
+    if (last_slash) {
+        *last_slash = '\0';  // Truncate at the last slash
+    }
+    if (strlen(path_copy) == 0) {
+        strcpy(path_copy, "/");  // If path becomes empty, reset to root
+    }
+
+    // Split the path into components and traverse
+    char *token = strtok(path_copy, "/");
+    while (token) {
+        int count = read_directory(disk, parent_block, entries, 100);
+        if (count == -1) {
+            printf("Error reading directory during traversal\n");
+            return 51;  // Default to root on error
+        }
+
+        int found = 0;
+        for (int i = 0; i < count; i++) {
+            if (strcmp(entries[i].filename, token) == 0 && entries[i].status == 0x02) { // Directory
+                parent_block = entries[i].starting_block;
+                found = 1;
+                break;
+            }
+        }
+
+        if (!found) {
+            printf("Error: Parent directory not found during traversal\n");
+            return 51;  // Default to root on error
+        }
+
+        token = strtok(NULL, "/");  // Move to the next component
+    }
+
+    return parent_block;
+}
+
 // Function to change the current directory
 int change_directory(FILE *disk, const char *dir_name) {
+    // Handle the "cd .." case
+    if (strcmp(dir_name, "..") == 0) {
+        if (current_directory_block == 51) {
+            printf("Already at root directory\n");
+            return 0;
+        }
+
+        uint32_t parent_block = find_parent_block(disk, current_directory_block);
+        current_directory_block = parent_block;
+
+        // Update the path
+        char *last_slash = strrchr(current_directory_path, '/');
+        if (last_slash) {
+            *last_slash = '\0';  // Remove the last component
+        }
+        if (strlen(current_directory_path) == 0) {
+            strcpy(current_directory_path, "/");  // Reset to root if path becomes empty
+        }
+
+        return 0;
+    }
+    // Handle changing to a specific subdirectory
     dir_entry_t entries[100];
     int count = read_directory(disk, current_directory_block, entries, 100);
 
@@ -50,12 +123,17 @@ int change_directory(FILE *disk, const char *dir_name) {
 
     // Search for the directory entry matching dir_name
     for (int i = 0; i < count; i++) {
-        if (strcmp(entries[i].filename, dir_name) == 0){
+        if (strcmp(entries[i].filename, dir_name) == 0) { // Ensure it's a directory
             // Update the current directory block and path
             current_directory_block = entries[i].starting_block;
 
             // Update the path to include the new directory
-            strcat(current_directory_path, dir_name);
+            if (strcmp(current_directory_path, "/") == 0) {
+                strcat(current_directory_path, dir_name);
+            } else {
+                strcat(current_directory_path, "/");
+                strcat(current_directory_path, dir_name);
+            }
 
             return 0;
         }
