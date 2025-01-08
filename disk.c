@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "disk.h"
+#include <arpa/inet.h> // For ntohl
 
 // Function to read a block from the disk image
 int read_block(FILE *disk, uint32_t block_number, void *buffer) {
@@ -41,9 +42,9 @@ int read_directory(FILE *disk, uint32_t dir_block, dir_entry_t *entries, int max
 
             // Copy the rest of the fields as well
             entries[entry_count].status = entry->status;
-            entries[entry_count].starting_block = entry->starting_block;
-            entries[entry_count].number_of_blocks = entry->number_of_blocks;
-            entries[entry_count].file_size = entry->file_size;
+            entries[entry_count].starting_block = ntohl(entry->starting_block);
+            entries[entry_count].number_of_blocks = ntohl(entry->number_of_blocks);
+            entries[entry_count].file_size = ntohl(entry->file_size);
             memcpy(entries[entry_count].creation_time, entry->creation_time, 7);
             memcpy(entries[entry_count].modification_time, entry->modification_time, 7);
             entry_count++;
