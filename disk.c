@@ -9,6 +9,7 @@
 // Function to read a block from the disk image
 int read_block(FILE *disk, uint32_t block_number, void *buffer) {
     // Move the file pointer to the correct block
+    //printf("block number in read block: %d\n", block_number);
     if (fseek(disk, block_number * 512, SEEK_SET) != 0) {
         return -1;  // Error seeking to the correct block
     }
@@ -26,6 +27,7 @@ int read_block(FILE *disk, uint32_t block_number, void *buffer) {
 int read_directory(FILE *disk, uint32_t dir_block, dir_entry_t *entries, int max_entries) {
     char buffer[512];  // Temporary buffer to store block data
     int entry_count = 0;
+    //printf("block number in read_dir: %d\n", dir_block);
 
     if (read_block(disk, dir_block, buffer) != 512) {
         return -1;  // Error reading block
@@ -39,7 +41,7 @@ int read_directory(FILE *disk, uint32_t dir_block, dir_entry_t *entries, int max
         if (entry->status != 0x00) {
 		
 	    memcpy(entries[entry_count].filename, entry->filename, FILENAME_MAX_LEN);
-
+		//printf("entrie: %s\n", entry->filename);
             // Copy the rest of the fields as well
             entries[entry_count].status = entry->status;
             entries[entry_count].starting_block = ntohl(entry->starting_block);
@@ -57,8 +59,9 @@ int read_directory(FILE *disk, uint32_t dir_block, dir_entry_t *entries, int max
 // Function for displaying the directory
 void display_directory(const dir_entry_t *entries, int count) {
     for (int i = 0; i < count; ++i) {
-        // Determine if the entry is a directory (0x03) or a file (0x05)
-        char entry_type = (entries[i].status == 0x05) ? 'D' : 'F';  // 0x02 indicates directory, 0x05 indicates file
+        // Determine if the entry is a directory (0x05) or a file (0x03)
+	//printf("entry: %s status: %x\n", entries[i].filename, entries[i].status);
+        char entry_type = (entries[i].status == 0x05) ? 'D' : 'F';  // 0x05 indicates directory, 0x03 indicates file
         printf("%c %10s\n", entry_type, entries[i].filename);
     
     }
