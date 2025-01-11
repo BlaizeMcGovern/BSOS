@@ -24,5 +24,6 @@ typedef struct {
 int read_block(FILE *disk, uint32_t block_number, void *buffer);
 int read_directory(FILE *disk, uint32_t dir_block, dir_entry_t *entries, int max_entries);  // Declare here
 void display_directory(const dir_entry_t *entries, int count);
+int write_block(FILE *disk, uint32_t block_number, const void *buffer);
 #endif // DISK_H
 
