@@ -40,6 +40,105 @@ void execute_ls(FILE *disk) {
     display_directory(entries, count);  // Display the entries in the directory
 }
 
+
+int create_file(FILE *disk, const char *file_name) {
+    if (strlen(file_name) > FILENAME_MAX_LEN - 1) {
+        printf("File name too long\n");
+        return -1;
+    }
+
+    // Read the FAT into memory
+    uint32_t *fat = malloc(32 * 512);
+    if (!fat) {
+        printf("Error allocating memory for FAT\n");
+        return -1;
+    }
+    for (int i = 0; i < 32; i++) {
+        if (read_block(disk, 1 + i, ((char *)fat) + (i * 512)) != 512) {
+            printf("Error reading FAT block %d\n", i);
+            free(fat);
+            return -1;
+        }
+    }
+
+    // Read current directory entries
+    dir_entry_t entries[100];
+    int count = read_directory(disk, current_directory_block, entries, 100);
+    if (count == -1) {
+        printf("Error reading current directory\n");
+        free(fat);
+        return -1;
+    }
+
+    // Check for duplicate file name
+    for (int i = 0; i < count; i++) {
+        if (strcmp(entries[i].filename, file_name) == 0) {
+            printf("File '%s' already exists\n", file_name);
+            free(fat);
+            return -1;
+        }
+    }
+
+    // Find a free directory entry
+    int free_slot = -1;
+    for (int i = 0; i < 100; i++) {
+        if (entries[i].status == 0x00) { // Unused entry
+            free_slot = i;
+            break;
+        }
+    }
+
+    if (free_slot == -1) {
+        printf("No free slots in the current directory\n");
+        free(fat);
+        return -1;
+    }
+
+    // Optionally allocate a block for the file (or set it as empty)
+    uint32_t first_block = 0xFFFFFFFF; // No blocks allocated for an empty file
+    for (uint32_t i = 0; i < (32 * 512) / sizeof(uint32_t); i++) {
+        if (fat[i] == FAT_FREE) {
+            first_block = i;
+            fat[i] = ntohl(0xFFFFFFFF); // Mark as end of chain
+            break;
+        }
+    }
+
+    if (first_block == 0xFFFFFFFF) {
+        printf("No free blocks available for the file\n");
+        free(fat);
+        return -1;
+    }
+
+    // Update the directory entry
+    memset(&entries[free_slot], 0, sizeof(dir_entry_t));
+    entries[free_slot].status = 0x03; // Mark as file
+    entries[free_slot].starting_block = ntohl(first_block);
+    entries[free_slot].number_of_blocks = ntohl(1);
+    entries[free_slot].file_size = ntohl(0);
+    strncpy(entries[free_slot].filename, file_name, FILENAME_MAX_LEN);
+    memset(entries[free_slot].unused, 0xFF, 6);
+
+    // Write the updated directory and FAT back to disk
+    if (write_block(disk, current_directory_block, entries) != 512) {
+        printf("Error writing directory block\n");
+        free(fat);
+        return -1;
+    }
+    for (int i = 0; i < 32; i++) {
+        if (write_block(disk, 1 + i, ((char *)fat) + (i * 512)) != 512) {
+            printf("Error writing FAT block %d\n", i);
+            free(fat);
+            return -1;
+        }
+    }
+
+    free(fat);
+    printf("File '%s' created successfully\n", file_name);
+    return 0;
+}
+
+
 // Find the parent directory block by traversing from the root to the parent
 uint32_t find_parent_block(FILE *disk, uint32_t current_block) {
     if (strcmp(current_directory_path, "/") == 0) {
@@ -282,6 +381,73 @@ int write_block(FILE *disk, uint32_t block_number, const void *buffer) {
 }
 
 
+int delete_file(FILE *disk, const char *file_name) {
+    // Read current directory entries
+    dir_entry_t entries[100];
+    int count = read_directory(disk, current_directory_block, entries, 100);
+    if (count == -1) {
+        printf("Error reading current directory\n");
+        return -1;
+    }
+
+    // Find the file in the directory
+    int file_index = -1;
+    for (int i = 0; i < count; i++) {
+        if (strcmp(entries[i].filename, file_name) == 0) {
+            file_index = i;
+            break;
+        }
+    }
+
+    if (file_index == -1) {
+        printf("File '%s' not found\n", file_name);
+        return -1;
+    }
+
+    // Read the FAT into memory
+    uint32_t *fat = malloc(32 * 512);
+    if (!fat) {
+        printf("Error allocating memory for FAT\n");
+        return -1;
+    }
+    for (int i = 0; i < 32; i++) {
+        if (read_block(disk, 1 + i, ((char *)fat) + (i * 512)) != 512) {
+            printf("Error reading FAT block %d\n", i);
+            free(fat);
+            return -1;
+        }
+    }
+
+    // Free all blocks used by the file in the FAT
+    uint32_t block = ntohl(entries[file_index].starting_block);
+    while (block != 0xFFFFFFFF) {
+        uint32_t next_block = ntohl(fat[block]);
+        fat[block] = FAT_FREE;
+        block = next_block;
+    }
+
+    // Mark the directory entry as unused
+    memset(&entries[file_index], 0, sizeof(dir_entry_t));
+
+    // Write the updated directory and FAT back to disk
+    if (write_block(disk, current_directory_block, entries) != 512) {
+        printf("Error writing directory block\n");
+        free(fat);
+        return -1;
+    }
+    for (int i = 0; i < 32; i++) {
+        if (write_block(disk, 1 + i, ((char *)fat) + (i * 512)) != 512) {
+            printf("Error writing FAT block %d\n", i);
+            free(fat);
+            return -1;
+        }
+    }
+
+    free(fat);
+    printf("File '%s' deleted successfully\n", file_name);
+    return 0;
+}
+
 
 int main() {
     FILE *disk = fopen("dir_testing.img", "r+b");
@@ -321,7 +487,13 @@ int main() {
         } else if (strncmp(command, "mkdir ", 6) == 0) {
     		const char *dir_name = command + 6;
     		create_directory(disk, dir_name);
-	} else {
+	}else if (strncmp(command, "touch ", 6) == 0) {
+    		const char *file_name = command + 6;
+    		create_file(disk, file_name); 
+	}else if (strncmp(command, "rm ", 3) == 0) {
+    		const char *file_name = command + 3;
+    		delete_file(disk, file_name);	
+    	}else {
             printf("Unknown command: %s\n", command);
         }
     }
